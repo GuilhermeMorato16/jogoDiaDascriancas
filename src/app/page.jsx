@@ -22,40 +22,56 @@ import {
   doc,
   updateDoc,
 } from "firebase/firestore";
-import { toaster } from "@/components/ui/toaster";
+import { toaster } from "@/components/ui/toaster"; // Supondo que seu toaster Ark UI esteja configurado
 
 export default function Home() {
-  // --- jogo ---
+  // --- Estados do Jogo ---
   const [jogadores, setJogadores] = useState([]);
   const [opcoes, setOpcoes] = useState([]);
   const [donoImagem, setDonoImagem] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [resposta, setResposta] = useState(null);
+  const [erroJogo, setErroJogo] = useState(null); // Para feedback se não houver jogadores
 
-  // --- login / usuário ---
+  // --- Estados do Usuário e Login ---
   const [cpfInput, setCpfInput] = useState("");
   const [authenticating, setAuthenticating] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
 
+  // --- Estados de Tentativas e Fim de Jogo ---
   const [tentativas, setTentativas] = useState(0);
   const [fimDeJogo, setFimDeJogo] = useState(false);
   const [bonus, setBonus] = useState(false);
-  // NOVO: Estado de loading para o botão de usar bônus
   const [usandoBonus, setUsandoBonus] = useState(false);
   const MAX_TENTATIVAS = 10;
 
+  // --- Funções Utilitárias ---
   const shuffle = (array) => array.sort(() => Math.random() - 0.5);
   const cleanCpf = (cpf) => (cpf || "").replace(/\D/g, "");
+
+  // --- Lógica Principal do Jogo ---
 
   const carregarJogadores = async () => {
     try {
       const querySnapshot = await getDocs(collection(db, "cadastros"));
+      
       const lista = querySnapshot.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }))
         .filter((jogador) => jogador.imageUrl);
-      setJogadores(lista);
+
+      // Valida se há jogadores suficientes para o jogo começar
+      if (lista.length > 0 && lista.length < 4) {
+       console.log(lista)
+        setErroJogo("É necessário ter pelo menos 4 jogadores cadastrados com foto para o jogo começar.");
+      } else if (lista.length === 0) {
+        setErroJogo("Nenhum jogador com foto encontrado. Cadastre mais participantes!");
+      } else {
+        setErroJogo(null); // Limpa o erro se houver jogadores
+        setJogadores(lista);
+      }
     } catch (error) {
       console.error("Erro ao carregar jogadores:", error);
+      setErroJogo("Ocorreu um erro ao carregar os dados do jogo.");
     } finally {
       setCarregando(false);
     }
@@ -70,8 +86,13 @@ export default function Home() {
     setResposta(null);
   };
 
-  useEffect(() => { carregarJogadores(); }, []);
-  useEffect(() => { if (jogadores.length > 0) gerarRodada(); }, [jogadores]);
+  useEffect(() => {
+    carregarJogadores();
+  }, []);
+
+  useEffect(() => {
+    if (jogadores.length > 0) gerarRodada();
+  }, [jogadores]);
 
   const handleLoginByCpf = async (e) => {
     e?.preventDefault();
@@ -80,10 +101,7 @@ export default function Home() {
 
     const cpfLimpo = cleanCpf(cpfInput);
     if (!cpfLimpo) {
-      toaster.create({ title: "Campos incompletos",
-      description: "Por favor, preencha nome, CPF e empresa.",
-      type: "warning",
-      duration: 3000, });
+      toaster.create({ title: "CPF inválido", type: "warning" });
       setAuthenticating(false);
       return;
     }
@@ -103,13 +121,11 @@ export default function Home() {
       
       userData.score = userData.score ?? 0;
       userData.tentativasJogadas = userData.tentativasJogadas ?? 0;
-      // ALTERADO: Carrega o status do bônus do banco
       userData.possuiBonus = userData.possuiBonus ?? false;
       setBonus(userData.possuiBonus);
 
       setCurrentUser(userData);
 
-      // A verificação de fim de jogo continua a mesma
       if (userData.tentativasJogadas >= MAX_TENTATIVAS) {
         setFimDeJogo(true);
         return;
@@ -124,41 +140,30 @@ export default function Home() {
       });
     } catch (error) {
       console.error("Erro ao logar por CPF:", error);
+      toaster.create({ title: "Erro ao buscar CPF", type: "error" });
     } finally {
       setAuthenticating(false);
     }
   };
 
-  // NOVO: Função para usar o bônus e jogar novamente
   const handleJogarNovamenteComBonus = async () => {
     if (usandoBonus) return;
     setUsandoBonus(true);
 
     try {
       const userRef = doc(db, "cadastros", currentUser.id);
-      // Reseta as tentativas e consome o bônus no Firestore
       await updateDoc(userRef, {
         tentativasJogadas: 0,
-        possuiBonus: false, // Bônus utilizado
+        possuiBonus: false,
       });
       
-      // Reseta o estado local do jogo
       setTentativas(0);
       setFimDeJogo(false);
       setBonus(false);
-      setCurrentUser((prev) => ({
-        ...prev,
-        tentativasJogadas: 0,
-        possuiBonus: false,
-      }));
+      setCurrentUser((prev) => ({ ...prev, tentativasJogadas: 0, possuiBonus: false }));
       
-      toaster.create({
-        title: "Segunda chance!",
-        description: "Suas tentativas foram resetadas. Boa sorte!",
-        type: "success",
-      });
-
-      gerarRodada(); // Inicia uma nova rodada
+      toaster.create({ title: "Segunda chance!", description: "Suas tentativas foram resetadas.", type: "success" });
+      gerarRodada();
     } catch (err) {
       console.error("Erro ao usar o bônus:", err);
       toaster.create({ title: "Erro", description: "Não foi possível usar o bônus.", type: "error" });
@@ -194,8 +199,19 @@ export default function Home() {
     }
   };
 
+  // --- Renderização Condicional ---
+
   if (carregando) {
     return ( <AbsoluteCenter><VStack><Spinner /><Heading>Carregando...</Heading></VStack></AbsoluteCenter> );
+  }
+
+  if (erroJogo) {
+    return (
+      <AbsoluteCenter textAlign="center" p={8}>
+        <Heading size="md">Opa!</Heading>
+        <Text mt={4}>{erroJogo}</Text>
+      </AbsoluteCenter>
+    )
   }
 
   if (!currentUser) {
@@ -204,7 +220,7 @@ export default function Home() {
         <Box p={{ base: 4, md: 8 }} w={{ base: "100%", md: "520px" }} borderRadius="lg" shadow="lg">
           <VStack spacing={6}>
             <Heading size="lg">Entrar com CPF</Heading>
-            <Text textAlign="center">Informe o CPF para jogar.</Text>
+            <Text textAlign="center">Informe o CPF cadastrado para jogar.</Text>
             <form style={{ width: "100%" }} onSubmit={handleLoginByCpf}>
               <VStack spacing={4}>
                 <Input placeholder="000.000.000-00" value={cpfInput} onChange={(e) => setCpfInput(e.target.value)} />
@@ -217,7 +233,6 @@ export default function Home() {
     );
   }
   
-  // ALTERADO: Tela de Fim de Jogo com a lógica de bônus
   if (fimDeJogo) {
     return (
       <AbsoluteCenter px={{ base: 4, md: 8 }} w={"100%"}>
@@ -226,19 +241,10 @@ export default function Home() {
             <Heading size="xl">Fim de Jogo!</Heading>
             <Text fontSize="lg" mt={4}>Sua pontuação final foi:</Text>
             <Heading size="3xl" color="blue.500">{currentUser.score}</Heading>
-            
-            {/* Verifica se o usuário tem o bônus para mostrar a opção correta */}
             {bonus ? (
               <>
-                <Text fontSize="md" color="gray.600" pt={4}>Você adicionou sua foto no cadastro e recebeu mais uma chance!</Text>
-                <Button
-                  onClick={handleJogarNovamenteComBonus}
-                  isLoading={usandoBonus}
-                  loadingText="Aguarde..."
-                  size={"lg"}
-                  colorScheme="blue"
-                  width={"100%"}
-                >
+                <Text fontSize="md" color="gray.600" pt={4}>Você cadastrou uma foto e ganhou uma chance extra!</Text>
+                <Button onClick={handleJogarNovamenteComBonus} isLoading={usandoBonus} loadingText="Aguarde..." size={"lg"} colorScheme="blue" width={"100%"}>
                   Jogar novamente
                 </Button>
               </>
@@ -251,7 +257,6 @@ export default function Home() {
     );
   }
 
-  // --- Tela do Jogo ---
   return (
     <AbsoluteCenter px={{ base: 4, md: 8 }} w={"100%"}>
       <Box p={{ base: 0, md: 8 }} w={{ base: "100%", md: "720px" }}>
