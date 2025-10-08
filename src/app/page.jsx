@@ -80,7 +80,10 @@ export default function Home() {
 
     const cpfLimpo = cleanCpf(cpfInput);
     if (!cpfLimpo) {
-      toaster.create({ title: "CPF inválido", type: "warning" });
+      toaster.create({ title: "Campos incompletos",
+      description: "Por favor, preencha nome, CPF e empresa.",
+      type: "warning",
+      duration: 3000, });
       setAuthenticating(false);
       return;
     }

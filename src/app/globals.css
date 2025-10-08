@@ -40,3 +40,6 @@ a {
     color-scheme: dark;
   }
 }
+input{
+  padding: 0 5px;
+}
