@@ -45,23 +45,20 @@ export default function Home() {
   const [usandoBonus, setUsandoBonus] = useState(false);
   const [jogadoresJaSorteados, setJogadoresJaSorteados] = useState([]);
   const [primeiraPontuacao, setPrimeiraPontuacao] = useState(null);
-  const MAX_TENTATIVAS = 10;
+  // ALTERADO: MAX_TENTATIVAS agora é um estado
+  const [maxTentativas, setMaxTentativas] = useState(20); 
 
-  // NOVO: useEffect para salvar a PONTUAÇÃO MÁXIMA no banco de dados ao final do jogo
+  // useEffect para salvar a pontuação máxima
   useEffect(() => {
-    // Só executa sua lógica quando o estado 'fimDeJogo' se torna true
     if (fimDeJogo && currentUser) {
       const salvarPontuacaoFinal = async () => {
-        // 1. Calcula qual foi a maior pontuação (igual à lógica da tela final)
         const pontuacaoFinal = primeiraPontuacao !== null
           ? Math.max(primeiraPontuacao, currentUser.score)
           : currentUser.score;
 
-        // 2. Pega a referência do documento do usuário
         const userRef = doc(db, "cadastros", currentUser.id);
 
         try {
-          // 3. Faz uma última atualização no banco APENAS com o score mais alto
           await updateDoc(userRef, {
             score: pontuacaoFinal,
           });
@@ -74,7 +71,7 @@ export default function Home() {
 
       salvarPontuacaoFinal();
     }
-  }, [fimDeJogo, currentUser, primeiraPontuacao]); // Dependências do useEffect
+  }, [fimDeJogo, currentUser, primeiraPontuacao]);
 
   // --- Funções Utilitárias ---
   const shuffle = (array) => [...array].sort(() => Math.random() - 0.5);
@@ -211,13 +208,22 @@ export default function Home() {
       const userDoc = qs.docs[0];
       const userData = { id: userDoc.id, ...userDoc.data() };
 
+      // NOVO: Define o número de tentativas com base na empresa
+      if (userData.empresa === 'GC') {
+        setMaxTentativas(7);
+      } else {
+        setMaxTentativas(20);
+      }
+
       userData.score = userData.score ?? 0;
       userData.tentativasJogadas = userData.tentativasJogadas ?? 0;
       userData.possuiBonus = userData.possuiBonus ?? false;
       setBonus(userData.possuiBonus);
       setCurrentUser(userData);
-
-      if (userData.tentativasJogadas >= MAX_TENTATIVAS) {
+      
+      // ALTERADO: A verificação de fim de jogo usa o valor correto
+      const limiteDeTentativas = userData.empresa === 'GC' ? 7 : 20;
+      if (userData.tentativasJogadas >= limiteDeTentativas) {
         setFimDeJogo(true);
         setAuthenticating(false);
         return;
@@ -297,15 +303,15 @@ export default function Home() {
       console.error("Erro ao atualizar dados:", err);
     }
 
-    if (novaTentativa >= MAX_TENTATIVAS) {
+    // ALTERADO: Usa o estado 'maxTentativas' para a verificação
+    if (novaTentativa >= maxTentativas) {
       setFimDeJogo(true);
     } else {
       setTimeout(() => gerarRodada(), 1500);
     }
   };
 
-  // --- Renderização Condicional (nenhuma mudança aqui) ---
-  // ...
+  // --- Renderização ---
   if (carregando) {
     return ( <AbsoluteCenter><VStack><Spinner /><Heading>Carregando...</Heading></VStack></AbsoluteCenter> );
   }
@@ -382,29 +388,30 @@ export default function Home() {
               <Text fontSize="sm">Jogador</Text>
               <Text fontWeight="bold">{currentUser.nomeCompleto}</Text>
               <Text fontSize="sm">Pontuação: {currentUser.score ?? 0}</Text>
-              <Text fontSize="sm" color="gray.500">Rodada: {tentativas + 1}/{MAX_TENTATIVAS}</Text>
+              {/* ALTERADO: Usa o estado para exibir o total de rodadas */}
+              <Text fontSize="sm" color="gray.500">Rodada: {tentativas + 1}/{maxTentativas}</Text>
             </Box>
           </HStack>
           <VStack spacing={4} align="center">
             <Heading size="3xl" mb={10}>QUEM SOU EU?</Heading>
             <Box
-  boxSize={{ base: "260px", md: "320px" }} // O tamanho fica no contêiner
-  borderRadius="xl" // O estilo fica no contêiner
-  shadow="lg" // A sombra fica no contêiner
-  overflow="hidden" // Garante que a imagem não "vaze" das bordas arredondadas
-  display="flex"
-  alignItems="center"
-  justifyContent="center"
-  bg="gray.100" // Um fundo neutro para preencher o espaço vazio
->
-  <Image
-    src={donoImagem?.imageUrl}
-    alt="Foto misteriosa"
-    objectFit="contain" // A imagem agora pode "conter-se" dentro do Box
-    maxW="100%" // Garante que a imagem não ultrapasse a largura do Box
-    maxH="100%" // Garante que a imagem não ultrapasse a altura do Box
-  />
-</Box>
+              boxSize={{ base: "260px", md: "320px" }}
+              borderRadius="xl"
+              shadow="lg"
+              overflow="hidden"
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              bg="gray.100"
+            >
+              <Image
+                src={donoImagem?.imageUrl}
+                alt="Foto misteriosa"
+                objectFit="contain"
+                maxW="100%"
+                maxH="100%"
+              />
+            </Box>
             <SimpleGrid columns={{ base: 1, md: 2 }} gap={4} w="100%">
               {opcoes.map((item) => (
                 <Button textTransform={"uppercase"} key={item.id} variant="outline" size="lg" w="100%" onClick={() => verificarResposta(item.id)} isDisabled={!!resposta}
