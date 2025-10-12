@@ -22,16 +22,16 @@ import {
   doc,
   updateDoc,
 } from "firebase/firestore";
-import { toaster } from "@/components/ui/toaster"; // Supondo que seu toaster Ark UI esteja configurado
+import { toaster } from "@/components/ui/toaster";
 
 export default function Home() {
   // --- Estados do Jogo ---
   const [jogadores, setJogadores] = useState([]);
   const [opcoes, setOpcoes] = useState([]);
   const [donoImagem, setDonoImagem] = useState(null);
-  const [carregando, setCarregando] = useState(true);
+  const [carregando, setCarregando] = useState(false);
   const [resposta, setResposta] = useState(null);
-  const [erroJogo, setErroJogo] = useState(null); // Para feedback se não houver jogadores
+  const [erroJogo, setErroJogo] = useState(null);
 
   // --- Estados do Usuário e Login ---
   const [cpfInput, setCpfInput] = useState("");
@@ -43,52 +43,144 @@ export default function Home() {
   const [fimDeJogo, setFimDeJogo] = useState(false);
   const [bonus, setBonus] = useState(false);
   const [usandoBonus, setUsandoBonus] = useState(false);
+  const [jogadoresJaSorteados, setJogadoresJaSorteados] = useState([]);
+  const [primeiraPontuacao, setPrimeiraPontuacao] = useState(null);
   const MAX_TENTATIVAS = 10;
 
+  // NOVO: useEffect para salvar a PONTUAÇÃO MÁXIMA no banco de dados ao final do jogo
+  useEffect(() => {
+    // Só executa sua lógica quando o estado 'fimDeJogo' se torna true
+    if (fimDeJogo && currentUser) {
+      const salvarPontuacaoFinal = async () => {
+        // 1. Calcula qual foi a maior pontuação (igual à lógica da tela final)
+        const pontuacaoFinal = primeiraPontuacao !== null
+          ? Math.max(primeiraPontuacao, currentUser.score)
+          : currentUser.score;
+
+        // 2. Pega a referência do documento do usuário
+        const userRef = doc(db, "cadastros", currentUser.id);
+
+        try {
+          // 3. Faz uma última atualização no banco APENAS com o score mais alto
+          await updateDoc(userRef, {
+            score: pontuacaoFinal,
+          });
+          console.log("Pontuação final salva no banco de dados:", pontuacaoFinal);
+        } catch (error) {
+          console.error("Erro ao salvar a pontuação final no banco:", error);
+          toaster.create({ title: "Erro", description: "Não foi possível salvar sua pontuação final.", type: "error" });
+        }
+      };
+
+      salvarPontuacaoFinal();
+    }
+  }, [fimDeJogo, currentUser, primeiraPontuacao]); // Dependências do useEffect
+
   // --- Funções Utilitárias ---
-  const shuffle = (array) => array.sort(() => Math.random() - 0.5);
+  const shuffle = (array) => [...array].sort(() => Math.random() - 0.5);
   const cleanCpf = (cpf) => (cpf || "").replace(/\D/g, "");
 
   // --- Lógica Principal do Jogo ---
 
-  const carregarJogadores = async () => {
+  const carregarJogadores = async (empresaDoUsuario, idDoUsuario) => {
+    setCarregando(true);
     try {
-      const querySnapshot = await getDocs(collection(db, "cadastros"));
-      
-      const lista = querySnapshot.docs
-        .map((doc) => ({ id: doc.id, ...doc.data() }))
-        .filter((jogador) => jogador.imageUrl);
+      const q = query(
+        collection(db, "cadastros"),
+        where("empresa", "==", empresaDoUsuario)
+      );
+      const querySnapshot = await getDocs(q);
 
-      // Valida se há jogadores suficientes para o jogo começar
-      if (lista.length > 0 && lista.length < 4) {
-       console.log(lista)
-        setErroJogo("É necessário ter pelo menos 4 jogadores cadastrados com foto para o jogo começar.");
-      } else if (lista.length === 0) {
-        setErroJogo("Nenhum jogador com foto encontrado. Cadastre mais participantes!");
+      const lista = querySnapshot.docs
+        .map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }))
+        .filter((jogador) => jogador.imageUrl && jogador.genero)
+        .filter((jogador) => jogador.id !== idDoUsuario);
+
+      const homens = lista.filter(j => j.genero === 'm');
+      const mulheres = lista.filter(j => j.genero === 'f');
+
+      if (lista.length < 4) {
+          setErroJogo(`Não há jogadores suficientes na empresa '${empresaDoUsuario}' para iniciar. (Mínimo: 4)`);
+      } else if (homens.length < 2 || mulheres.length < 2) {
+          setErroJogo(`É necessário ter pelo menos 2 homens e 2 mulheres com foto na empresa '${empresaDoUsuario}' para jogar.`);
       } else {
-        setErroJogo(null); // Limpa o erro se houver jogadores
+        setErroJogo(null);
         setJogadores(lista);
       }
     } catch (error) {
-      console.error("Erro ao carregar jogadores:", error);
+      console.error("Erro ao carregar jogadores da empresa:", error);
       setErroJogo("Ocorreu um erro ao carregar os dados do jogo.");
     } finally {
       setCarregando(false);
     }
   };
 
+  const maskCPF = (value) => {
+    return value
+      .replace(/\D/g, '')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+      .substring(0, 14);
+  };
+
   const gerarRodada = () => {
     if (jogadores.length < 4) return;
-    const sorteados = shuffle([...jogadores]).slice(0, 4);
-    const escolhido = sorteados[Math.floor(Math.random() * 4)];
+
+    let homensDisponiveis = jogadores.filter(j => j.genero === 'm' && !jogadoresJaSorteados.includes(j.id));
+    let mulheresDisponiveis = jogadores.filter(j => j.genero === 'f' && !jogadoresJaSorteados.includes(j.id));
+
+    if (homensDisponiveis.length === 0 || mulheresDisponiveis.length === 0) {
+        setJogadoresJaSorteados([]);
+        homensDisponiveis = jogadores.filter(j => j.genero === 'm');
+        mulheresDisponiveis = jogadores.filter(j => j.genero === 'f');
+    }
+    
+    if (homensDisponiveis.length < 1 || mulheresDisponiveis.length < 1) {
+        setErroJogo("Não há mais combinações de gênero possíveis para continuar.");
+        return;
+    }
+
+    let escolhido;
+    let homensSorteados;
+    let mulheresSorteadas;
+
+    const generoEscolhido = Math.random() > 0.5 ? 'm' : 'f';
+
+    if (generoEscolhido === 'm' && homensDisponiveis.length > 0) {
+        escolhido = shuffle(homensDisponiveis)[0];
+        homensSorteados = shuffle(jogadores.filter(j => j.genero === 'm' && j.id !== escolhido.id)).slice(0, 1);
+        mulheresSorteadas = shuffle(jogadores.filter(j => j.genero === 'f')).slice(0, 2);
+        homensSorteados.push(escolhido);
+    } else if (generoEscolhido === 'f' && mulheresDisponiveis.length > 0) {
+        escolhido = shuffle(mulheresDisponiveis)[0];
+        mulheresSorteadas = shuffle(jogadores.filter(j => j.genero === 'f' && j.id !== escolhido.id)).slice(0, 1);
+        homensSorteados = shuffle(jogadores.filter(j => j.genero === 'm')).slice(0, 2);
+        mulheresSorteadas.push(escolhido);
+    } else {
+        if (homensDisponiveis.length > 0) {
+            escolhido = shuffle(homensDisponiveis)[0];
+            homensSorteados = shuffle(jogadores.filter(j => j.genero === 'm' && j.id !== escolhido.id)).slice(0, 1);
+            mulheresSorteadas = shuffle(jogadores.filter(j => j.genero === 'f')).slice(0, 2);
+            homensSorteados.push(escolhido);
+        } else {
+            escolhido = shuffle(mulheresDisponiveis)[0];
+            mulheresSorteadas = shuffle(jogadores.filter(j => j.genero === 'f' && j.id !== escolhido.id)).slice(0, 1);
+            homensSorteados = shuffle(jogadores.filter(j => j.genero === 'm')).slice(0, 2);
+            mulheresSorteadas.push(escolhido);
+        }
+    }
+
+    const sorteados = shuffle([...homensSorteados, ...mulheresSorteadas]);
+
     setOpcoes(sorteados);
     setDonoImagem(escolhido);
     setResposta(null);
+    setJogadoresJaSorteados(prev => [...prev, escolhido.id]);
   };
-
-  useEffect(() => {
-    carregarJogadores();
-  }, []);
 
   useEffect(() => {
     if (jogadores.length > 0) gerarRodada();
@@ -118,21 +210,25 @@ export default function Home() {
 
       const userDoc = qs.docs[0];
       const userData = { id: userDoc.id, ...userDoc.data() };
-      
+
       userData.score = userData.score ?? 0;
       userData.tentativasJogadas = userData.tentativasJogadas ?? 0;
       userData.possuiBonus = userData.possuiBonus ?? false;
       setBonus(userData.possuiBonus);
-
       setCurrentUser(userData);
 
       if (userData.tentativasJogadas >= MAX_TENTATIVAS) {
         setFimDeJogo(true);
+        setAuthenticating(false);
         return;
       }
 
+      setJogadoresJaSorteados([]);
+      setPrimeiraPontuacao(null);
       setTentativas(userData.tentativasJogadas);
       setFimDeJogo(false);
+      await carregarJogadores(userData.empresa, userData.id);
+
       toaster.create({
         title: "Bem-vindo!",
         description: `Olá, ${userData.nomeCompleto}. Boa sorte!`,
@@ -150,19 +246,28 @@ export default function Home() {
     if (usandoBonus) return;
     setUsandoBonus(true);
 
+    setPrimeiraPontuacao(currentUser.score);
+
     try {
       const userRef = doc(db, "cadastros", currentUser.id);
       await updateDoc(userRef, {
+        score: 0,
         tentativasJogadas: 0,
         possuiBonus: false,
       });
-      
+
+      setJogadoresJaSorteados([]);
       setTentativas(0);
       setFimDeJogo(false);
       setBonus(false);
-      setCurrentUser((prev) => ({ ...prev, tentativasJogadas: 0, possuiBonus: false }));
-      
-      toaster.create({ title: "Segunda chance!", description: "Suas tentativas foram resetadas.", type: "success" });
+      setCurrentUser((prev) => ({
+        ...prev,
+        score: 0,
+        tentativasJogadas: 0,
+        possuiBonus: false
+      }));
+
+      toaster.create({ title: "Segunda chance!", description: "Sua pontuação foi salva. Boa sorte!", type: "success" });
       gerarRodada();
     } catch (err) {
       console.error("Erro ao usar o bônus:", err);
@@ -199,8 +304,8 @@ export default function Home() {
     }
   };
 
-  // --- Renderização Condicional ---
-
+  // --- Renderização Condicional (nenhuma mudança aqui) ---
+  // ...
   if (carregando) {
     return ( <AbsoluteCenter><VStack><Spinner /><Heading>Carregando...</Heading></VStack></AbsoluteCenter> );
   }
@@ -223,7 +328,7 @@ export default function Home() {
             <Text textAlign="center">Informe o CPF cadastrado para jogar.</Text>
             <form style={{ width: "100%" }} onSubmit={handleLoginByCpf}>
               <VStack spacing={4}>
-                <Input placeholder="000.000.000-00" value={cpfInput} onChange={(e) => setCpfInput(e.target.value)} />
+                <Input placeholder="000.000.000-00" value={cpfInput} onChange={(e) => setCpfInput(maskCPF(e.target.value))} />
                 <Button type="submit" colorScheme="blue" isLoading={authenticating} loadingText="Verificando..." w="100%">Entrar</Button>
               </VStack>
             </form>
@@ -232,15 +337,25 @@ export default function Home() {
       </AbsoluteCenter>
     );
   }
-  
+
   if (fimDeJogo) {
+    const pontuacaoFinal = primeiraPontuacao !== null
+      ? Math.max(primeiraPontuacao, currentUser.score)
+      : currentUser.score;
+
     return (
       <AbsoluteCenter px={{ base: 4, md: 8 }} w={"100%"}>
         <Box p={{ base: 4, md: 8 }} w={{ base: "100%", md: "520px" }} borderRadius="lg" shadow="lg" textAlign="center">
           <VStack spacing={6}>
             <Heading size="xl">Fim de Jogo!</Heading>
-            <Text fontSize="lg" mt={4}>Sua pontuação final foi:</Text>
-            <Heading size="3xl" color="blue.500">{currentUser.score}</Heading>
+            <Text fontSize="lg" mt={4}>Sua melhor pontuação foi:</Text>
+            <Heading size="3xl" color="blue.500">{pontuacaoFinal}</Heading>
+            {primeiraPontuacao !== null && (
+              <Text fontSize="md" color="gray.500">
+                (1ª Rodada: {primeiraPontuacao} | 2ª Rodada: {currentUser.score})
+              </Text>
+            )}
+
             {bonus ? (
               <>
                 <Text fontSize="md" color="gray.600" pt={4}>Você cadastrou uma foto e ganhou uma chance extra!</Text>
@@ -249,7 +364,7 @@ export default function Home() {
                 </Button>
               </>
             ) : (
-              <Text fontSize="md" color="gray.600" pt={4}>Você já completou todas as suas tentativas.</Text>
+              <Text fontSize="md" color="gray.600" pt={4}>Obrigado por jogar!</Text>
             )}
           </VStack>
         </Box>
@@ -272,10 +387,27 @@ export default function Home() {
           </HStack>
           <VStack spacing={4} align="center">
             <Heading size="3xl" mb={10}>QUEM SOU EU?</Heading>
-            <Image src={donoImagem?.imageUrl} alt="Foto misteriosa" borderRadius="xl" boxSize={{ base: "260px", md: "320px" }} objectFit="cover" shadow="lg"/>
+            <Box
+  boxSize={{ base: "260px", md: "320px" }} // O tamanho fica no contêiner
+  borderRadius="xl" // O estilo fica no contêiner
+  shadow="lg" // A sombra fica no contêiner
+  overflow="hidden" // Garante que a imagem não "vaze" das bordas arredondadas
+  display="flex"
+  alignItems="center"
+  justifyContent="center"
+  bg="gray.100" // Um fundo neutro para preencher o espaço vazio
+>
+  <Image
+    src={donoImagem?.imageUrl}
+    alt="Foto misteriosa"
+    objectFit="contain" // A imagem agora pode "conter-se" dentro do Box
+    maxW="100%" // Garante que a imagem não ultrapasse a largura do Box
+    maxH="100%" // Garante que a imagem não ultrapasse a altura do Box
+  />
+</Box>
             <SimpleGrid columns={{ base: 1, md: 2 }} gap={4} w="100%">
               {opcoes.map((item) => (
-                <Button key={item.id} variant="outline" size="lg" w="100%" onClick={() => verificarResposta(item.id)} isDisabled={!!resposta}
+                <Button textTransform={"uppercase"} key={item.id} variant="outline" size="lg" w="100%" onClick={() => verificarResposta(item.id)} isDisabled={!!resposta}
                   colorScheme={ resposta && item.id === donoImagem.id ? "green" : resposta && item.id !== donoImagem.id ? "red" : "blue" }>
                   {item.nomeCompleto}
                 </Button>
