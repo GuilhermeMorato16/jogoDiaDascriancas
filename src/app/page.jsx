@@ -124,59 +124,55 @@ export default function Home() {
   };
 
   const gerarRodada = () => {
-    if (jogadores.length < 4) return;
+  if (jogadores.length < 4) return;
 
-    let homensDisponiveis = jogadores.filter(j => j.genero === 'm' && !jogadoresJaSorteados.includes(j.id));
-    let mulheresDisponiveis = jogadores.filter(j => j.genero === 'f' && !jogadoresJaSorteados.includes(j.id));
+  // NOVO: Filtrar todos os jogadores que ainda não foram usados em nenhuma rodada
+  const jogadoresDisponiveis = jogadores.filter(j => !jogadoresJaSorteados.includes(j.id));
 
-    if (homensDisponiveis.length === 0 || mulheresDisponiveis.length === 0) {
-        setJogadoresJaSorteados([]);
-        homensDisponiveis = jogadores.filter(j => j.genero === 'm');
-        mulheresDisponiveis = jogadores.filter(j => j.genero === 'f');
-    }
-    
-    if (homensDisponiveis.length < 1 || mulheresDisponiveis.length < 1) {
-        setErroJogo("Não há mais combinações de gênero possíveis para continuar.");
-        return;
-    }
+  // NOVO: Verificar se ainda há jogadores suficientes para montar uma rodada
+  if (jogadoresDisponiveis.length < 4) {
+    setErroJogo("Não há mais jogadores únicos suficientes para gerar novas rodadas.");
+    setFimDeJogo(true);
+    return;
+  }
 
-    let escolhido;
-    let homensSorteados;
-    let mulheresSorteadas;
+  const homensDisponiveis = jogadoresDisponiveis.filter(j => j.genero === 'm');
+  const mulheresDisponiveis = jogadoresDisponiveis.filter(j => j.genero === 'f');
 
-    const generoEscolhido = Math.random() > 0.5 ? 'm' : 'f';
+  if (homensDisponiveis.length < 1 || mulheresDisponiveis.length < 1) {
+    setErroJogo("Não há mais combinações de gênero possíveis para continuar.");
+    setFimDeJogo(true);
+    return;
+  }
 
-    if (generoEscolhido === 'm' && homensDisponiveis.length > 0) {
-        escolhido = shuffle(homensDisponiveis)[0];
-        homensSorteados = shuffle(jogadores.filter(j => j.genero === 'm' && j.id !== escolhido.id)).slice(0, 1);
-        mulheresSorteadas = shuffle(jogadores.filter(j => j.genero === 'f')).slice(0, 2);
-        homensSorteados.push(escolhido);
-    } else if (generoEscolhido === 'f' && mulheresDisponiveis.length > 0) {
-        escolhido = shuffle(mulheresDisponiveis)[0];
-        mulheresSorteadas = shuffle(jogadores.filter(j => j.genero === 'f' && j.id !== escolhido.id)).slice(0, 1);
-        homensSorteados = shuffle(jogadores.filter(j => j.genero === 'm')).slice(0, 2);
-        mulheresSorteadas.push(escolhido);
-    } else {
-        if (homensDisponiveis.length > 0) {
-            escolhido = shuffle(homensDisponiveis)[0];
-            homensSorteados = shuffle(jogadores.filter(j => j.genero === 'm' && j.id !== escolhido.id)).slice(0, 1);
-            mulheresSorteadas = shuffle(jogadores.filter(j => j.genero === 'f')).slice(0, 2);
-            homensSorteados.push(escolhido);
-        } else {
-            escolhido = shuffle(mulheresDisponiveis)[0];
-            mulheresSorteadas = shuffle(jogadores.filter(j => j.genero === 'f' && j.id !== escolhido.id)).slice(0, 1);
-            homensSorteados = shuffle(jogadores.filter(j => j.genero === 'm')).slice(0, 2);
-            mulheresSorteadas.push(escolhido);
-        }
-    }
+  let escolhido;
+  let homensSorteados = [];
+  let mulheresSorteadas = [];
 
-    const sorteados = shuffle([...homensSorteados, ...mulheresSorteadas]);
+  const generoEscolhido = Math.random() > 0.5 ? 'm' : 'f';
 
-    setOpcoes(sorteados);
-    setDonoImagem(escolhido);
-    setResposta(null);
-    setJogadoresJaSorteados(prev => [...prev, escolhido.id]);
-  };
+  if (generoEscolhido === 'm' && homensDisponiveis.length > 0) {
+    escolhido = shuffle(homensDisponiveis)[0];
+    homensSorteados = shuffle(homensDisponiveis.filter(j => j.id !== escolhido.id)).slice(0, 1);
+    mulheresSorteadas = shuffle(mulheresDisponiveis).slice(0, 2);
+    homensSorteados.push(escolhido);
+  } else {
+    escolhido = shuffle(mulheresDisponiveis)[0];
+    mulheresSorteadas = shuffle(mulheresDisponiveis.filter(j => j.id !== escolhido.id)).slice(0, 1);
+    homensSorteados = shuffle(homensDisponiveis).slice(0, 2);
+    mulheresSorteadas.push(escolhido);
+  }
+
+  const sorteados = shuffle([...homensSorteados, ...mulheresSorteadas]);
+
+  // NOVO: Registrar todos os jogadores usados nesta rodada
+  const idsUsados = [...sorteados.map(j => j.id), escolhido.id];
+  setJogadoresJaSorteados(prev => [...new Set([...prev, ...idsUsados])]);
+
+  setOpcoes(sorteados);
+  setDonoImagem(escolhido);
+  setResposta(null);
+};
 
   useEffect(() => {
     if (jogadores.length > 0) gerarRodada();
