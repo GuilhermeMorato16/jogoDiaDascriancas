@@ -123,56 +123,56 @@ export default function Home() {
       .substring(0, 14);
   };
 
-  const gerarRodada = () => {
+const gerarRodada = () => {
   if (jogadores.length < 4) return;
 
-  // NOVO: Filtrar todos os jogadores que ainda não foram usados em nenhuma rodada
-  const jogadoresDisponiveis = jogadores.filter(j => !jogadoresJaSorteados.includes(j.id));
+  // Filtra jogadores que ainda NÃO foram donos de imagem
+  const jogadoresNaoUsadosComoImagem = jogadores.filter(
+    (j) => !jogadoresJaSorteados.includes(j.id)
+  );
 
-  // NOVO: Verificar se ainda há jogadores suficientes para montar uma rodada
-  if (jogadoresDisponiveis.length < 4) {
-    setErroJogo("Não há mais jogadores únicos suficientes para gerar novas rodadas.");
+  // Se não há mais jogadores para serem donos de imagem, fim de jogo
+  if (jogadoresNaoUsadosComoImagem.length === 0) {
+    setErroJogo("Não há mais jogadores únicos disponíveis para novas rodadas.");
     setFimDeJogo(true);
     return;
   }
 
-  const homensDisponiveis = jogadoresDisponiveis.filter(j => j.genero === 'm');
-  const mulheresDisponiveis = jogadoresDisponiveis.filter(j => j.genero === 'f');
+  // Garante que o donoImagem nunca se repete
+  const escolhido = shuffle(jogadoresNaoUsadosComoImagem)[0];
 
-  if (homensDisponiveis.length < 1 || mulheresDisponiveis.length < 1) {
-    setErroJogo("Não há mais combinações de gênero possíveis para continuar.");
-    setFimDeJogo(true);
-    return;
+  // Define o gênero do donoImagem
+  const generoEscolhido = escolhido.genero;
+
+  // Filtra opções — agora os nomes podem repetir!
+  let opcoesPossiveis = jogadores.filter((j) => j.id !== escolhido.id);
+
+  // Caso o gênero oposto não tenha mais jogadores, usa só o gênero existente
+  const temHomens = jogadores.some((j) => j.genero === "m");
+  const temMulheres = jogadores.some((j) => j.genero === "f");
+
+  // Caso um gênero tenha acabado, não força paridade
+  if (generoEscolhido === "m" && !temMulheres) {
+    opcoesPossiveis = jogadores.filter((j) => j.id !== escolhido.id);
+  } else if (generoEscolhido === "f" && !temHomens) {
+    opcoesPossiveis = jogadores.filter((j) => j.id !== escolhido.id);
   }
 
-  let escolhido;
-  let homensSorteados = [];
-  let mulheresSorteadas = [];
+  // Escolhe 3 opções aleatórias (nomes podem repetir entre rodadas)
+  const opcoesSorteadas = shuffle(opcoesPossiveis).slice(0, 3);
 
-  const generoEscolhido = Math.random() > 0.5 ? 'm' : 'f';
+  // Junta o dono da imagem + opções e embaralha
+  const sorteados = shuffle([escolhido, ...opcoesSorteadas]);
 
-  if (generoEscolhido === 'm' && homensDisponiveis.length > 0) {
-    escolhido = shuffle(homensDisponiveis)[0];
-    homensSorteados = shuffle(homensDisponiveis.filter(j => j.id !== escolhido.id)).slice(0, 1);
-    mulheresSorteadas = shuffle(mulheresDisponiveis).slice(0, 2);
-    homensSorteados.push(escolhido);
-  } else {
-    escolhido = shuffle(mulheresDisponiveis)[0];
-    mulheresSorteadas = shuffle(mulheresDisponiveis.filter(j => j.id !== escolhido.id)).slice(0, 1);
-    homensSorteados = shuffle(homensDisponiveis).slice(0, 2);
-    mulheresSorteadas.push(escolhido);
-  }
-
-  const sorteados = shuffle([...homensSorteados, ...mulheresSorteadas]);
-
-  // NOVO: Registrar todos os jogadores usados nesta rodada
-  const idsUsados = [...sorteados.map(j => j.id), escolhido.id];
-  setJogadoresJaSorteados(prev => [...new Set([...prev, ...idsUsados])]);
-
+  // Atualiza estados
   setOpcoes(sorteados);
   setDonoImagem(escolhido);
   setResposta(null);
+
+  // Marca o jogador como já usado como dono de imagem
+  setJogadoresJaSorteados((prev) => [...prev, escolhido.id]);
 };
+
 
   useEffect(() => {
     if (jogadores.length > 0) gerarRodada();
