@@ -102,28 +102,22 @@ export default function Home() {
     }
   };
 
-  // #############################################################
-  // ##           FUNÇÃO PRINCIPAL COM A LÓGICA ALTERADA        ##
-  // #############################################################
   const carregarJogadoresDaFinal = async (idDoUsuario) => {
     setCarregando(true);
     setErroJogo(null);
     try {
-      // Busca 1: Funcionários da Simetria com score 20
       const qSimetria = query(
         collection(db, "cadastros"),
         where("empresa", "==", "Simetria"),
         where("score", "==", 20)
       );
       
-      // Busca 2: Funcionários da GC com score 7
       const qGC = query(
         collection(db, "cadastros"),
         where("empresa", "==", "GC"),
         where("score", "==", 7)
       );
 
-      // Busca 3: TODOS os funcionários com imgFinal = true
       const qImgFinal = query(
         collection(db, "cadastros"),
         where("imgFinal", "==", true)
@@ -135,12 +129,10 @@ export default function Home() {
         getDocs(qImgFinal)
       ]);
 
-      // Coleta os resultados
       const listaSimetria = simetriaSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const listaGC = gcSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const listaImgFinal = imgFinalSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      // Junta as três listas e remove duplicados usando um Map
       const finalistasUnicos = new Map();
       listaSimetria.forEach(jogador => finalistasUnicos.set(jogador.id, jogador));
       listaGC.forEach(jogador => finalistasUnicos.set(jogador.id, jogador));
@@ -154,7 +146,6 @@ export default function Home() {
         setErroJogo(`Não há finalistas suficientes para iniciar a rodada final (mínimo: 4).`);
       } else {
         setJogadores(finalistas);
-        // Define o número de tentativas como o total de finalistas
         setMaxTentativas(finalistas.length); 
         setTentativas(0);
         setCurrentUser(prev => ({...prev, score: 0}));
@@ -174,6 +165,9 @@ export default function Home() {
     await carregarJogadoresDaFinal(currentUser.id);
   };
 
+  // #############################################################
+  // ##           FUNÇÃO PRINCIPAL COM A LÓGICA ALTERADA        ##
+  // #############################################################
   const gerarRodada = () => {
     if (jogadores.length === 0) return;
 
@@ -189,7 +183,43 @@ export default function Home() {
 
     const escolhido = shuffle(jogadoresNaoUsadosComoImagem)[0];
     const opcoesPossiveis = jogadores.filter((j) => j.id !== escolhido.id);
-    const opcoesSorteadas = shuffle(opcoesPossiveis).slice(0, 3);
+    let opcoesSorteadas;
+
+    // Lógica condicional: Se o jogador da imagem for da GC
+    if (escolhido.empresa === 'GC') {
+      const opcoesGC = shuffle(opcoesPossiveis.filter(j => j.empresa === 'GC'));
+      const opcoesOutras = shuffle(opcoesPossiveis.filter(j => j.empresa !== 'GC'));
+      
+      opcoesSorteadas = [];
+
+      // Garante pelo menos uma outra opção da GC (totalizando 2 com o 'escolhido')
+      if (opcoesGC.length > 0) {
+        opcoesSorteadas.push(opcoesGC.pop());
+      }
+      
+      // Preenche o restante com outras empresas
+      while(opcoesSorteadas.length < 3) {
+        if (opcoesOutras.length > 0) {
+          opcoesSorteadas.push(opcoesOutras.pop());
+        } else {
+          break; // Sai se não houver mais jogadores de outras empresas
+        }
+      }
+      
+      // Fallback: se ainda faltarem opções, preenche com mais da GC
+      while(opcoesSorteadas.length < 3) {
+        if (opcoesGC.length > 0) {
+          opcoesSorteadas.push(opcoesGC.pop());
+        } else {
+          break; // Sai se não houver mais jogadores
+        }
+      }
+
+    } else {
+      // Lógica original para jogadores de outras empresas
+      opcoesSorteadas = shuffle(opcoesPossiveis).slice(0, 3);
+    }
+
     const sorteados = shuffle([escolhido, ...opcoesSorteadas]);
 
     setOpcoes(sorteados);
@@ -314,7 +344,7 @@ export default function Home() {
   if (!currentUser) {
     return (
       <AbsoluteCenter px={{ base: 4, md: 8 }} w="100%">
-        <Box p={{ base: 4, md: 8 }} w={{ base: "100%", md: "520px" }} borderRadius="lg" shadow="lg">
+        <Box p={{ base: 4, md: 8 }} w={{ base: "100%", md: "520px" }} borderRadius="lg" shadow="lg" bg="white">
           <VStack spacing={6}>
             <Heading size="lg">Quem sou eu?</Heading>
             <Text textAlign="center">Informe seu CPF para iniciar o jogo.</Text>
@@ -339,7 +369,7 @@ export default function Home() {
 
     return (
       <AbsoluteCenter px={{ base: 4, md: 8 }} w={"100%"}>
-        <Box p={{ base: 4, md: 8 }} w={{ base: "100%", md: "520px" }} borderRadius="lg" shadow="lg" textAlign="center">
+        <Box p={{ base: 4, md: 8 }} w={{ base: "100%", md: "520px" }} borderRadius="lg" shadow="lg" textAlign="center" bg="white">
           <VStack spacing={6}>
             <Heading size="xl">
               {gameMode === 'normal' ? 'Fim de Jogo!' : 'Fim da Final!'}
