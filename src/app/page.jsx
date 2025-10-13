@@ -344,7 +344,7 @@ export default function Home() {
   if (!currentUser) {
     return (
       <AbsoluteCenter px={{ base: 4, md: 8 }} w="100%">
-        <Box p={{ base: 4, md: 8 }} w={{ base: "100%", md: "520px" }} borderRadius="lg" shadow="lg" bg="white">
+        <Box p={{ base: 4, md: 8 }} w={{ base: "100%", md: "520px" }} borderRadius="lg" shadow="lg">
           <VStack spacing={6}>
             <Heading size="lg">Quem sou eu?</Heading>
             <Text textAlign="center">Informe seu CPF para iniciar o jogo.</Text>
@@ -369,7 +369,7 @@ export default function Home() {
 
     return (
       <AbsoluteCenter px={{ base: 4, md: 8 }} w={"100%"}>
-        <Box p={{ base: 4, md: 8 }} w={{ base: "100%", md: "520px" }} borderRadius="lg" shadow="lg" textAlign="center" bg="white">
+        <Box p={{ base: 4, md: 8 }} w={{ base: "100%", md: "520px" }} borderRadius="lg" shadow="lg" textAlign="center">
           <VStack spacing={6}>
             <Heading size="xl">
               {gameMode === 'normal' ? 'Fim de Jogo!' : 'Fim da Final!'}
