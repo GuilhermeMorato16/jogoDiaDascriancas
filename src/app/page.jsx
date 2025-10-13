@@ -245,9 +245,28 @@ export default function Home() {
     }
   };
 
+  // #############################################################
+  // ##            A ÚNICA MUDANÇA ESTÁ NESTA FUNÇÃO            ##
+  // #############################################################
   const handleJogarNovamenteComBonus = async () => {
     if (usandoBonus) return;
     setUsandoBonus(true);
+
+    // NOVO: Validação para garantir que há jogadores únicos suficientes para a 2ª rodada
+    const jogadoresDisponiveis = jogadores.filter(j => !jogadoresJaSorteados.includes(j.id));
+    const homensDisponiveis = jogadoresDisponiveis.filter(j => j.genero === 'm');
+    const mulheresDisponiveis = jogadoresDisponiveis.filter(j => j.genero === 'f');
+
+    if (homensDisponiveis.length < 2 || mulheresDisponiveis.length < 2) {
+        toaster.create({ 
+            title: "Ops!", 
+            description: "Não há jogadores únicos suficientes para uma segunda rodada.", 
+            type: "error" 
+        });
+        setUsandoBonus(false);
+        return; // Impede o início da segunda rodada
+    }
+    // FIM DA VALIDAÇÃO
 
     setPrimeiraPontuacao(currentUser.score);
 
@@ -259,10 +278,8 @@ export default function Home() {
         possuiBonus: false,
       });
 
-      // ALTERADO: A lista de jogadores sorteados só é resetada se a empresa NÃO for 'Simetria'
-      if (currentUser.empresa !== 'Simetria') {
-        setJogadoresJaSorteados([]);
-      }
+      // REMOVIDO: A condição que resetava a lista foi removida.
+      // A lista de 'jogadoresJaSorteados' agora SEMPRE persiste na segunda rodada.
       
       setTentativas(0);
       setFimDeJogo(false);
