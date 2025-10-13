@@ -58,20 +58,14 @@ export default function Home() {
 
   // --- Lógica Principal do Jogo ---
 
-  // #############################################################
-  // ##           FUNÇÃO PRINCIPAL COM A LÓGICA ALTERADA        ##
-  // #############################################################
   const carregarJogadoresNormais = async (empresaDoUsuario, idDoUsuario) => {
     setCarregando(true);
     setErroJogo(null);
     try {
-      // Busca 1: Pega todos os jogadores da empresa do usuário.
       const qEmpresa = query(
         collection(db, "cadastros"),
         where("empresa", "==", empresaDoUsuario)
       );
-
-      // Busca 2: Pega TODOS os jogadores de QUALQUER empresa com imgFinal = true.
       const qImgFinal = query(
         collection(db, "cadastros"),
         where("imgFinal", "==", true)
@@ -85,14 +79,12 @@ export default function Home() {
       const listaDaEmpresa = empresaSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const listaImgFinal = imgFinalSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      // Junta as duas listas e remove duplicados usando um Map
       const jogadoresUnicos = new Map();
       listaDaEmpresa.forEach(jogador => jogadoresUnicos.set(jogador.id, jogador));
       listaImgFinal.forEach(jogador => jogadoresUnicos.set(jogador.id, jogador));
 
       const listaCombinada = Array.from(jogadoresUnicos.values());
 
-      // Aplica os filtros finais na lista combinada
       const listaFinal = listaCombinada
         .filter((jogador) => jogador.imageUrl && jogador.genero)
         .filter((jogador) => jogador.id !== idDoUsuario);
@@ -102,8 +94,7 @@ export default function Home() {
       } else {
         setJogadores(listaFinal);
       }
-    } catch (error)
-    {
+    } catch (error) {
       console.error("Erro ao carregar jogadores:", error);
       setErroJogo("Ocorreu um erro ao carregar os dados do jogo.");
     } finally {
@@ -111,31 +102,51 @@ export default function Home() {
     }
   };
 
+  // #############################################################
+  // ##           FUNÇÃO PRINCIPAL COM A LÓGICA ALTERADA        ##
+  // #############################################################
   const carregarJogadoresDaFinal = async (idDoUsuario) => {
     setCarregando(true);
     setErroJogo(null);
     try {
+      // Busca 1: Funcionários da Simetria com score 20
       const qSimetria = query(
         collection(db, "cadastros"),
         where("empresa", "==", "Simetria"),
         where("score", "==", 20)
       );
       
+      // Busca 2: Funcionários da GC com score 7
       const qGC = query(
         collection(db, "cadastros"),
         where("empresa", "==", "GC"),
         where("score", "==", 7)
       );
 
-      const [simetriaSnapshot, gcSnapshot] = await Promise.all([
+      // Busca 3: TODOS os funcionários com imgFinal = true
+      const qImgFinal = query(
+        collection(db, "cadastros"),
+        where("imgFinal", "==", true)
+      );
+
+      const [simetriaSnapshot, gcSnapshot, imgFinalSnapshot] = await Promise.all([
         getDocs(qSimetria),
-        getDocs(qGC)
+        getDocs(qGC),
+        getDocs(qImgFinal)
       ]);
 
+      // Coleta os resultados
       const listaSimetria = simetriaSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const listaGC = gcSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const listaImgFinal = imgFinalSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      const finalistas = [...listaSimetria, ...listaGC]
+      // Junta as três listas e remove duplicados usando um Map
+      const finalistasUnicos = new Map();
+      listaSimetria.forEach(jogador => finalistasUnicos.set(jogador.id, jogador));
+      listaGC.forEach(jogador => finalistasUnicos.set(jogador.id, jogador));
+      listaImgFinal.forEach(jogador => finalistasUnicos.set(jogador.id, jogador));
+
+      const finalistas = Array.from(finalistasUnicos.values())
         .filter(jogador => jogador.imageUrl && jogador.genero)
         .filter(jogador => jogador.id !== idDoUsuario);
 
@@ -143,7 +154,8 @@ export default function Home() {
         setErroJogo(`Não há finalistas suficientes para iniciar a rodada final (mínimo: 4).`);
       } else {
         setJogadores(finalistas);
-        setMaxTentativas(finalistas.length);
+        // Define o número de tentativas como o total de finalistas
+        setMaxTentativas(finalistas.length); 
         setTentativas(0);
         setCurrentUser(prev => ({...prev, score: 0}));
         setJogadoresJaSorteados([]);
@@ -198,21 +210,13 @@ export default function Home() {
     setAuthenticating(true);
 
     const cpfLimpo = cleanCpf(cpfInput);
-    if (!cpfLimpo) {
-        console.error("CPF inválido");
-        setAuthenticating(false);
-        return;
-    }
+    if (!cpfLimpo) { return setAuthenticating(false); }
 
     try {
       const q = query(collection(db, "cadastros"), where("cpf", "==", cpfLimpo));
       const qs = await getDocs(q);
 
-      if (qs.empty) {
-        console.error("CPF não encontrado");
-        setAuthenticating(false);
-        return;
-      }
+      if (qs.empty) { return setAuthenticating(false); }
 
       const userDoc = qs.docs[0];
       const userData = { id: userDoc.id, ...userDoc.data() };
@@ -272,7 +276,6 @@ export default function Home() {
     }
   };
   
-    //useEffect para salvar pontuação da final
     useEffect(() => {
     if (fimDeJogo && gameMode === 'final' && currentUser) {
       const salvarPontuacaoDaFinal = async () => {
@@ -311,7 +314,7 @@ export default function Home() {
   if (!currentUser) {
     return (
       <AbsoluteCenter px={{ base: 4, md: 8 }} w="100%">
-        <Box p={{ base: 4, md: 8 }} w={{ base: "100%", md: "520px" }} borderRadius="lg" shadow="lg" >
+        <Box p={{ base: 4, md: 8 }} w={{ base: "100%", md: "520px" }} borderRadius="lg" shadow="lg">
           <VStack spacing={6}>
             <Heading size="lg">Quem sou eu?</Heading>
             <Text textAlign="center">Informe seu CPF para iniciar o jogo.</Text>
