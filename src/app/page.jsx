@@ -45,7 +45,6 @@ export default function Home() {
   const [usandoBonus, setUsandoBonus] = useState(false);
   const [jogadoresJaSorteados, setJogadoresJaSorteados] = useState([]);
   const [primeiraPontuacao, setPrimeiraPontuacao] = useState(null);
-  // ALTERADO: MAX_TENTATIVAS agora é um estado
   const [maxTentativas, setMaxTentativas] = useState(20); 
 
   // useEffect para salvar a pontuação máxima
@@ -208,7 +207,6 @@ export default function Home() {
       const userDoc = qs.docs[0];
       const userData = { id: userDoc.id, ...userDoc.data() };
 
-      // NOVO: Define o número de tentativas com base na empresa
       if (userData.empresa === 'GC') {
         setMaxTentativas(7);
       } else {
@@ -221,7 +219,6 @@ export default function Home() {
       setBonus(userData.possuiBonus);
       setCurrentUser(userData);
       
-      // ALTERADO: A verificação de fim de jogo usa o valor correto
       const limiteDeTentativas = userData.empresa === 'GC' ? 7 : 20;
       if (userData.tentativasJogadas >= limiteDeTentativas) {
         setFimDeJogo(true);
@@ -262,7 +259,11 @@ export default function Home() {
         possuiBonus: false,
       });
 
-      setJogadoresJaSorteados([]);
+      // ALTERADO: A lista de jogadores sorteados só é resetada se a empresa NÃO for 'Simetria'
+      if (currentUser.empresa !== 'Simetria') {
+        setJogadoresJaSorteados([]);
+      }
+      
       setTentativas(0);
       setFimDeJogo(false);
       setBonus(false);
@@ -303,7 +304,6 @@ export default function Home() {
       console.error("Erro ao atualizar dados:", err);
     }
 
-    // ALTERADO: Usa o estado 'maxTentativas' para a verificação
     if (novaTentativa >= maxTentativas) {
       setFimDeJogo(true);
     } else {
@@ -388,7 +388,6 @@ export default function Home() {
               <Text fontSize="sm">Jogador</Text>
               <Text fontWeight="bold">{currentUser.nomeCompleto}</Text>
               <Text fontSize="sm">Pontuação: {currentUser.score ?? 0}</Text>
-              {/* ALTERADO: Usa o estado para exibir o total de rodadas */}
               <Text fontSize="sm" color="gray.500">Rodada: {tentativas + 1}/{maxTentativas}</Text>
             </Box>
           </HStack>
