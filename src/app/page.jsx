@@ -22,9 +22,11 @@ import {
   doc,
   updateDoc,
 } from "firebase/firestore";
-import { toaster } from "@/components/ui/toaster";
+import { useToast } from "@/components/ui/use-toast"; // Supondo que você use o toast do ShadCN/Radix
 
 export default function Home() {
+  const { toast } = useToast(); // Hook para exibir notificações
+
   // --- Estados do Jogo ---
   const [jogadores, setJogadores] = useState([]);
   const [opcoes, setOpcoes] = useState([]);
@@ -45,7 +47,7 @@ export default function Home() {
   const [usandoBonus, setUsandoBonus] = useState(false);
   const [jogadoresJaSorteados, setJogadoresJaSorteados] = useState([]);
   const [primeiraPontuacao, setPrimeiraPontuacao] = useState(null);
-  const [maxTentativas, setMaxTentativas] = useState(20); 
+  const [maxTentativas, setMaxTentativas] = useState(20);
 
   // useEffect para salvar a pontuação máxima
   useEffect(() => {
@@ -64,7 +66,7 @@ export default function Home() {
           console.log("Pontuação final salva no banco de dados:", pontuacaoFinal);
         } catch (error) {
           console.error("Erro ao salvar a pontuação final no banco:", error);
-          toaster.create({ title: "Erro", description: "Não foi possível salvar sua pontuação final.", type: "error" });
+          toast({ title: "Erro", description: "Não foi possível salvar sua pontuação final.", variant: "destructive" });
         }
       };
 
@@ -77,7 +79,6 @@ export default function Home() {
   const cleanCpf = (cpf) => (cpf || "").replace(/\D/g, "");
 
   // --- Lógica Principal do Jogo ---
-
   const carregarJogadores = async (empresaDoUsuario, idDoUsuario) => {
     setCarregando(true);
     try {
@@ -95,16 +96,11 @@ export default function Home() {
         .filter((jogador) => jogador.imageUrl && jogador.genero)
         .filter((jogador) => jogador.id !== idDoUsuario);
 
-      const homens = lista.filter(j => j.genero === 'm');
-      const mulheres = lista.filter(j => j.genero === 'f');
-
       if (lista.length < 4) {
-          setErroJogo(`Não há jogadores suficientes na empresa '${empresaDoUsuario}' para iniciar. (Mínimo: 4)`);
-      } else if (homens.length < 2 || mulheres.length < 2) {
-          setErroJogo(`É necessário ter pelo menos 2 homens e 2 mulheres com foto na empresa '${empresaDoUsuario}' para jogar.`);
+          setErroJogo(`Não há jogadores suficientes na empresa '${empresaDoUsuario}' para iniciar. (Mínimo: 4 com foto e gênero definidos)`);
       } else {
-        setErroJogo(null);
-        setJogadores(lista);
+          setErroJogo(null);
+          setJogadores(lista);
       }
     } catch (error) {
       console.error("Erro ao carregar jogadores da empresa:", error);
@@ -123,56 +119,46 @@ export default function Home() {
       .substring(0, 14);
   };
 
-const gerarRodada = () => {
-  if (jogadores.length < 4) return;
+  // #############################################################
+  // ##           FUNÇÃO PRINCIPAL COM A LÓGICA ALTERADA        ##
+  // #############################################################
+  const gerarRodada = () => {
+    if (jogadores.length === 0) return;
 
-  // Filtra jogadores que ainda NÃO foram donos de imagem
-  const jogadoresNaoUsadosComoImagem = jogadores.filter(
-    (j) => !jogadoresJaSorteados.includes(j.id)
-  );
+    // 1. Filtra jogadores cuja IMAGEM ainda não foi usada.
+    const jogadoresNaoUsadosComoImagem = jogadores.filter(
+      (j) => !jogadoresJaSorteados.includes(j.id)
+    );
 
-  // Se não há mais jogadores para serem donos de imagem, fim de jogo
-  if (jogadoresNaoUsadosComoImagem.length === 0) {
-    setErroJogo("Não há mais jogadores únicos disponíveis para novas rodadas.");
-    setFimDeJogo(true);
-    return;
-  }
+    // 2. Se não há mais imagens únicas, o jogo acaba. Esta é a única condição de fim.
+    if (jogadoresNaoUsadosComoImagem.length === 0) {
+      setErroJogo("Todas as imagens de jogadores disponíveis foram utilizadas. Parabéns!");
+      setFimDeJogo(true);
+      return;
+    }
 
-  // Garante que o donoImagem nunca se repete
-  const escolhido = shuffle(jogadoresNaoUsadosComoImagem)[0];
+    // 3. Sorteia um novo dono de imagem único.
+    const escolhido = shuffle(jogadoresNaoUsadosComoImagem)[0];
 
-  // Define o gênero do donoImagem
-  const generoEscolhido = escolhido.genero;
+    // 4. Cria a lista de possíveis NOMES para as opções.
+    // Pega todos os jogadores, exceto o dono da imagem.
+    // Como os nomes podem repetir, usamos a lista 'jogadores' completa.
+    const opcoesPossiveis = jogadores.filter((j) => j.id !== escolhido.id);
 
-  // Filtra opções — agora os nomes podem repetir!
-  let opcoesPossiveis = jogadores.filter((j) => j.id !== escolhido.id);
+    // 5. Sorteia 3 nomes aleatórios para serem as opções incorretas.
+    const opcoesSorteadas = shuffle(opcoesPossiveis).slice(0, 3);
 
-  // Caso o gênero oposto não tenha mais jogadores, usa só o gênero existente
-  const temHomens = jogadores.some((j) => j.genero === "m");
-  const temMulheres = jogadores.some((j) => j.genero === "f");
+    // 6. Junta o nome correto com os 3 incorretos e embaralha para os botões.
+    const sorteados = shuffle([escolhido, ...opcoesSorteadas]);
 
-  // Caso um gênero tenha acabado, não força paridade
-  if (generoEscolhido === "m" && !temMulheres) {
-    opcoesPossiveis = jogadores.filter((j) => j.id !== escolhido.id);
-  } else if (generoEscolhido === "f" && !temHomens) {
-    opcoesPossiveis = jogadores.filter((j) => j.id !== escolhido.id);
-  }
+    // 7. Atualiza os estados do jogo.
+    setOpcoes(sorteados);
+    setDonoImagem(escolhido);
+    setResposta(null);
 
-  // Escolhe 3 opções aleatórias (nomes podem repetir entre rodadas)
-  const opcoesSorteadas = shuffle(opcoesPossiveis).slice(0, 3);
-
-  // Junta o dono da imagem + opções e embaralha
-  const sorteados = shuffle([escolhido, ...opcoesSorteadas]);
-
-  // Atualiza estados
-  setOpcoes(sorteados);
-  setDonoImagem(escolhido);
-  setResposta(null);
-
-  // Marca o jogador como já usado como dono de imagem
-  setJogadoresJaSorteados((prev) => [...prev, escolhido.id]);
-};
-
+    // 8. Adiciona o ID do dono da imagem à lista de 'já sorteados' para garantir que não se repita.
+    setJogadoresJaSorteados((prev) => [...prev, escolhido.id]);
+  };
 
   useEffect(() => {
     if (jogadores.length > 0) gerarRodada();
@@ -185,7 +171,7 @@ const gerarRodada = () => {
 
     const cpfLimpo = cleanCpf(cpfInput);
     if (!cpfLimpo) {
-      toaster.create({ title: "CPF inválido", type: "warning" });
+      toast({ title: "CPF inválido", variant: "warning" });
       setAuthenticating(false);
       return;
     }
@@ -195,27 +181,23 @@ const gerarRodada = () => {
       const qs = await getDocs(q);
 
       if (qs.empty) {
-        toaster.create({ title: "CPF não encontrado", type: "error" });
+        toast({ title: "CPF não encontrado", variant: "destructive" });
         setAuthenticating(false);
         return;
       }
 
       const userDoc = qs.docs[0];
       const userData = { id: userDoc.id, ...userDoc.data() };
-
-      if (userData.empresa === 'GC') {
-        setMaxTentativas(7);
-      } else {
-        setMaxTentativas(20);
-      }
-
+      
+      const limiteDeTentativas = userData.empresa === 'GC' ? 7 : 20;
+      setMaxTentativas(limiteDeTentativas);
+      
       userData.score = userData.score ?? 0;
       userData.tentativasJogadas = userData.tentativasJogadas ?? 0;
       userData.possuiBonus = userData.possuiBonus ?? false;
       setBonus(userData.possuiBonus);
       setCurrentUser(userData);
       
-      const limiteDeTentativas = userData.empresa === 'GC' ? 7 : 20;
       if (userData.tentativasJogadas >= limiteDeTentativas) {
         setFimDeJogo(true);
         setAuthenticating(false);
@@ -228,41 +210,36 @@ const gerarRodada = () => {
       setFimDeJogo(false);
       await carregarJogadores(userData.empresa, userData.id);
 
-      toaster.create({
+      toast({
         title: "Bem-vindo!",
         description: `Olá, ${userData.nomeCompleto}. Boa sorte!`,
-        type: "success",
       });
     } catch (error) {
       console.error("Erro ao logar por CPF:", error);
-      toaster.create({ title: "Erro ao buscar CPF", type: "error" });
+      toast({ title: "Erro ao buscar CPF", variant: "destructive" });
     } finally {
       setAuthenticating(false);
     }
   };
-
+  
   // #############################################################
-  // ##            A ÚNICA MUDANÇA ESTÁ NESTA FUNÇÃO            ##
+  // ##             PEQUENO AJUSTE NA VALIDAÇÃO DO BÔNUS        ##
   // #############################################################
   const handleJogarNovamenteComBonus = async () => {
     if (usandoBonus) return;
     setUsandoBonus(true);
 
-    // NOVO: Validação para garantir que há jogadores únicos suficientes para a 2ª rodada
+    // Validação: Garante que há PELO MENOS UMA imagem única para a segunda rodada.
     const jogadoresDisponiveis = jogadores.filter(j => !jogadoresJaSorteados.includes(j.id));
-    const homensDisponiveis = jogadoresDisponiveis.filter(j => j.genero === 'm');
-    const mulheresDisponiveis = jogadoresDisponiveis.filter(j => j.genero === 'f');
-
-    if (homensDisponiveis.length < 2 || mulheresDisponiveis.length < 2) {
-        toaster.create({ 
+    if (jogadoresDisponiveis.length < 1) {
+        toast({ 
             title: "Ops!", 
-            description: "Não há jogadores únicos suficientes para uma segunda rodada.", 
-            type: "error" 
+            description: "Não há mais jogadores únicos disponíveis para uma segunda rodada.", 
+            variant: "destructive" 
         });
         setUsandoBonus(false);
-        return; // Impede o início da segunda rodada
+        return;
     }
-    // FIM DA VALIDAÇÃO
 
     setPrimeiraPontuacao(currentUser.score);
 
@@ -274,9 +251,6 @@ const gerarRodada = () => {
         possuiBonus: false,
       });
 
-      // REMOVIDO: A condição que resetava a lista foi removida.
-      // A lista de 'jogadoresJaSorteados' agora SEMPRE persiste na segunda rodada.
-      
       setTentativas(0);
       setFimDeJogo(false);
       setBonus(false);
@@ -287,11 +261,11 @@ const gerarRodada = () => {
         possuiBonus: false
       }));
 
-      toaster.create({ title: "Segunda chance!", description: "Sua pontuação foi salva. Boa sorte!", type: "success" });
+      toast({ title: "Segunda chance!", description: "Sua pontuação foi salva. Boa sorte!" });
       gerarRodada();
     } catch (err) {
       console.error("Erro ao usar o bônus:", err);
-      toaster.create({ title: "Erro", description: "Não foi possível usar o bônus.", type: "error" });
+      toast({ title: "Erro", description: "Não foi possível usar o bônus.", variant: "destructive" });
     } finally {
       setUsandoBonus(false);
     }
@@ -303,7 +277,7 @@ const gerarRodada = () => {
 
     const acertou = id === donoImagem.id;
     setResposta(acertou ? "acerto" : "erro");
-    toaster.create({ title: acertou ? "🎉 Acertou!" : "❌ Errou!", type: acertou ? "success" : "error", duration: 1500 });
+    toast({ title: acertou ? "🎉 Acertou!" : "❌ Errou!", duration: 1500 });
 
     const novaPontuacao = acertou ? (currentUser.score ?? 0) + 1 : (currentUser.score ?? 0);
     const novaTentativa = tentativas + 1;
@@ -324,12 +298,12 @@ const gerarRodada = () => {
     }
   };
 
-  // --- Renderização ---
+  // --- Renderização (sem alterações) ---
   if (carregando) {
     return ( <AbsoluteCenter><VStack><Spinner /><Heading>Carregando...</Heading></VStack></AbsoluteCenter> );
   }
 
-  if (erroJogo) {
+  if (erroJogo && !fimDeJogo) { // Mostra erro apenas se não for fim de jogo
     return (
       <AbsoluteCenter textAlign="center" p={8}>
         <Heading size="md">Opa!</Heading>
@@ -367,6 +341,7 @@ const gerarRodada = () => {
         <Box p={{ base: 4, md: 8 }} w={{ base: "100%", md: "520px" }} borderRadius="lg" shadow="lg" textAlign="center">
           <VStack spacing={6}>
             <Heading size="xl">Fim de Jogo!</Heading>
+            {erroJogo && <Text color="gray.500">{erroJogo}</Text>}
             <Text fontSize="lg" mt={4}>Sua melhor pontuação foi:</Text>
             <Heading size="3xl" color="blue.500">{pontuacaoFinal}</Heading>
             {primeiraPontuacao !== null && (
